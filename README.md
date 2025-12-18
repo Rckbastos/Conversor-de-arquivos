@@ -33,6 +33,5 @@ Este projeto faz build para `dist/` e sobe um servidor estático via `server.mjs
 
 No Railway:
 1. Conecte o repositório.
-2. O arquivo `railway.toml` já define build/start (Nixpacks).
+2. O arquivo `railway.toml` força o builder `RAILPACK` e define o `startCommand`.
 3. Deploy.
-
