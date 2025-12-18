@@ -4,6 +4,13 @@ import { convertImage } from './converters/imageConverter'
 import { convertDocument } from './converters/documentConverter'
 import { convertMedia } from './converters/audioVideoConverter'
 import { convertDataFile } from './converters/dataConverter'
+import {
+  deleteResultsForSession,
+  getConvertedResult,
+  isIndexedDbAvailable,
+  purgeOldResults,
+  putConvertedResult,
+} from './utils/historyStore'
 
 const app = document.getElementById('app')
 const logoUrl = new URL('./archlight_logo.png', import.meta.url).href
@@ -13,7 +20,16 @@ if (!app) {
 }
 
 const HISTORY_KEY = 'archlight_history_v1'
+const SESSION_ID_KEY = 'archlight_session_id_v1'
 const HISTORY_WINDOW_MS = 20 * 60 * 1000
+
+const sessionId =
+  sessionStorage.getItem(SESSION_ID_KEY) ||
+  (() => {
+    const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+    sessionStorage.setItem(SESSION_ID_KEY, id)
+    return id
+  })()
 
 app.innerHTML = `
   <div class="page">
@@ -213,7 +229,7 @@ app.innerHTML = `
               <p class="text-muted" style="text-transform:uppercase;font-weight:700;font-size:12px">Histórico</p>
               <h2 class="title">Últimos 20 minutos</h2>
               <p class="text-muted" style="margin:6px 0 0">
-                O histórico expira automaticamente. Downloads só ficam disponíveis enquanto esta aba estiver aberta (sessão atual).
+                O histórico expira automaticamente. Se suportado pelo navegador, o arquivo convertido pode ser baixado mesmo após recarregar a página.
               </p>
             </div>
             <button id="clear-history" class="btn btn-secondary" type="button" style="padding:10px 12px">Limpar</button>
@@ -326,7 +342,7 @@ const renderHistory = () => {
     const row = document.createElement('div')
     row.className = 'history-item'
 
-    const canDownload = item?.cacheId && resultCache.has(item.cacheId)
+    const canDownload = Boolean(item?.cacheId) && (resultCache.has(item.cacheId) || item?.persisted === true)
     row.innerHTML = `
       <div style="min-width:0">
         <div style="font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${item.outputName ?? 'arquivo'}</div>
@@ -394,6 +410,9 @@ clearHistoryBtn?.addEventListener('click', () => {
   writeHistory([])
   setHistoryCount(0)
   renderHistory()
+  if (isIndexedDbAvailable()) {
+    deleteResultsForSession(sessionId).catch(() => {})
+  }
 })
 
 const renderFileList = () => {
@@ -626,6 +645,22 @@ convertBtn?.addEventListener('click', async () => {
 
     const cacheId = result.jobId || job.id
     resultCache.set(cacheId, result)
+    let persisted = false
+    if (isIndexedDbAvailable()) {
+      try {
+        persisted = await putConvertedResult({
+          id: cacheId,
+          sessionId,
+          at: Date.now(),
+          outputName: result.outputName,
+          details: result.details,
+          blob: result.blob,
+        })
+      } catch {
+        persisted = false
+      }
+    }
+
     addToHistory({
       at: Date.now(),
       inputName: file.name,
@@ -634,6 +669,7 @@ convertBtn?.addEventListener('click', async () => {
       outputName: result.outputName,
       details: result.details,
       cacheId,
+      persisted,
     })
   } catch (error) {
     statusText.textContent = (error && error.message) || 'Falha na conversão'
@@ -655,13 +691,51 @@ historyList?.addEventListener('click', (event) => {
   if (!(target instanceof HTMLElement)) return
   const cacheId = target.getAttribute('data-history-download')
   if (!cacheId) return
-  const result = resultCache.get(cacheId)
-  if (!result) return
-  downloadConverted(result)
+  const inMemory = resultCache.get(cacheId)
+  if (inMemory) {
+    downloadConverted(inMemory)
+    return
+  }
+
+  ;(async () => {
+    const items = purgeOldHistory()
+    const item = items.find((it) => it.cacheId === cacheId)
+    if (!item) {
+      statusText.textContent = 'Esse item do histórico expirou.'
+      return
+    }
+
+    if (!isIndexedDbAvailable()) {
+      statusText.textContent = 'Download indisponível após refresh neste navegador.'
+      return
+    }
+
+    try {
+      const stored = await getConvertedResult(cacheId)
+      if (!stored || stored.sessionId !== sessionId) {
+        statusText.textContent = 'Arquivo do histórico não está mais disponível.'
+        return
+      }
+      if (typeof stored.at === 'number' && Date.now() - stored.at > HISTORY_WINDOW_MS) {
+        statusText.textContent = 'Esse item do histórico expirou.'
+        return
+      }
+      downloadConverted({
+        jobId: cacheId,
+        blob: stored.blob,
+        outputName: stored.outputName || item.outputName,
+      })
+    } catch {
+      statusText.textContent = 'Falha ao recuperar arquivo do histórico.'
+    }
+  })()
 })
 
 // Inicializar histórico (expurgo + contagem) e manter expiração funcionando
 setHistoryCount(purgeOldHistory().length)
+if (isIndexedDbAvailable()) {
+  purgeOldResults(HISTORY_WINDOW_MS).catch(() => {})
+}
 setInterval(() => {
   if (viewHistory && viewHistory.style.display !== 'none') {
     renderHistory()

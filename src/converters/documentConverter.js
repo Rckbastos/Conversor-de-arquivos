@@ -4,7 +4,10 @@ import mammoth from 'mammoth'
 import JSZip from 'jszip'
 import { buildOutputName } from '../utils/fileHandlers'
 
-GlobalWorkerOptions.workerSrc = '/dist/pdf.worker.min.mjs'
+// Resolve automaticamente:
+// - Dev: /dist/main.js -> /dist/pdf.worker.min.mjs
+// - Prod: /main.js -> /pdf.worker.min.mjs
+GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.meta.url).href
 
 const toPdfBlob = (bytes) => {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)

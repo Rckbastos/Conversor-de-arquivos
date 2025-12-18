@@ -21,8 +21,12 @@ const MIME = {
 }
 
 const safeJoin = (root, requestPath) => {
-  const decoded = decodeURIComponent(requestPath.split('?')[0])
-  const normalized = path.normalize(decoded).replace(/^(\.\.[/\\])+/, '')
+  const decoded = decodeURIComponent(requestPath.split('?')[0] || '/')
+  const withoutPrefix = decoded.startsWith('/dist/') ? decoded.slice('/dist/'.length) : decoded
+  const normalized = path
+    .normalize(withoutPrefix)
+    .replace(/^(\.\.[/\\])+/, '')
+    .replace(/^[/\\]+/, '')
   return path.join(root, normalized)
 }
 
@@ -76,4 +80,3 @@ server.listen(port, '0.0.0.0', () => {
   // eslint-disable-next-line no-console
   console.log(`Arclight running on http://0.0.0.0:${port}`)
 })
-

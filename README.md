@@ -23,7 +23,7 @@ Saída em `dist/`.
 ## Histórico (últimos 20 minutos)
 - A aba **Histórico** mostra conversões feitas nos últimos **20 minutos** (armazenado em `sessionStorage`).
 - Itens expiram automaticamente após 20 min.
-- O botão **Baixar** no histórico funciona apenas na **sessão atual** (o arquivo convertido não é persistido após recarregar a página).
+- O botão **Baixar** no histórico funciona na sessão atual e, se suportado, após refresh (o arquivo convertido pode ser persistido localmente via `IndexedDB` por até 20 min).
 
 ## Deploy no Railway
 Este projeto faz build para `dist/` e sobe um servidor estático via `server.mjs`.
