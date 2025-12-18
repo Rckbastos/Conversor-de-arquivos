@@ -30,10 +30,28 @@ const safeJoin = (root, requestPath) => {
   return path.join(root, normalized)
 }
 
-const sendFile = (res, filePath) => {
+const cacheControlFor = (ext) => {
+  // Como os assets não têm hash no nome (main.js/index.css), não podemos usar cache "immutable".
+  // Se cachear agressivo, o deploy pode ficar preso numa versão antiga no browser.
+  if (ext === '.html') return 'no-cache'
+  if (ext === '.js' || ext === '.mjs' || ext === '.css') return 'no-cache'
+  return 'public, max-age=86400'
+}
+
+const sendFile = (req, res, filePath) => {
   const ext = path.extname(filePath).toLowerCase()
+  const st = statSync(filePath)
+  const lastModified = st.mtime.toUTCString()
+
+  if (req.headers['if-modified-since'] === lastModified) {
+    res.statusCode = 304
+    res.end()
+    return
+  }
+
   res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream')
-  res.setHeader('Cache-Control', ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable')
+  res.setHeader('Cache-Control', cacheControlFor(ext))
+  res.setHeader('Last-Modified', lastModified)
   createReadStream(filePath).pipe(res)
 }
 
@@ -46,7 +64,7 @@ const server = http.createServer((req, res) => {
     if (pathname === '/' || pathname === '') {
       const filePath = path.join(distDir, 'index.html')
       res.statusCode = 200
-      sendFile(res, filePath)
+      sendFile(req, res, filePath)
       return
     }
 
@@ -54,7 +72,7 @@ const server = http.createServer((req, res) => {
     const candidate = safeJoin(distDir, pathname)
     if (existsSync(candidate) && statSync(candidate).isFile()) {
       res.statusCode = 200
-      sendFile(res, candidate)
+      sendFile(req, res, candidate)
       return
     }
 
@@ -62,7 +80,7 @@ const server = http.createServer((req, res) => {
     const indexPath = path.join(distDir, 'index.html')
     if (existsSync(indexPath)) {
       res.statusCode = 200
-      sendFile(res, indexPath)
+      sendFile(req, res, indexPath)
       return
     }
 
