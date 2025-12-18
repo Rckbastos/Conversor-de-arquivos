@@ -23,6 +23,37 @@ const HISTORY_KEY = 'archlight_history_v1'
 const SESSION_ID_KEY = 'archlight_session_id_v1'
 const HISTORY_WINDOW_MS = 20 * 60 * 1000
 
+// Correção para deploys antigos: se o usuário já teve PWA/Service Worker ativo,
+// ele pode manter assets antigos em cache e "não atualizar" o layout.
+const maybeCleanupLegacyPwa = async () => {
+  try {
+    if (!('serviceWorker' in navigator) || !('caches' in window)) return
+    if (localStorage.getItem('archlight_pwa_cleanup_v1') === 'done') return
+
+    const regs = await navigator.serviceWorker.getRegistrations()
+    if (!regs.length) {
+      localStorage.setItem('archlight_pwa_cleanup_v1', 'done')
+      return
+    }
+
+    await Promise.allSettled(regs.map((r) => r.unregister()))
+    const keys = await caches.keys()
+    await Promise.allSettled(keys.map((k) => caches.delete(k)))
+
+    localStorage.setItem('archlight_pwa_cleanup_v1', 'done')
+
+    // Recarrega só uma vez para pegar os assets novos.
+    if (sessionStorage.getItem('archlight_pwa_reloaded_v1') !== '1') {
+      sessionStorage.setItem('archlight_pwa_reloaded_v1', '1')
+      location.reload()
+    }
+  } catch {
+    // ignore
+  }
+}
+
+maybeCleanupLegacyPwa()
+
 const sessionId =
   sessionStorage.getItem(SESSION_ID_KEY) ||
   (() => {
@@ -42,7 +73,7 @@ app.innerHTML = `
                 <h1 class="title" style="font-size:30px; letter-spacing:1.4px">ARCHLIGHT</h1>
               </div>
             </div>
-            <span class="badge">Local · Offline · Seguro</span>
+            <span class="badge">Seguro</span>
           </div>
           <div class="tabs" style="margin-top:12px">
             <button class="tab active" id="tab-convert" type="button">Converter</button>

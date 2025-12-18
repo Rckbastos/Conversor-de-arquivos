@@ -46,6 +46,7 @@ await mkdir(dirname(workerDest.pathname), { recursive: true })
 await copyFile(workerSrc, workerDest)
 
 // Gerar HTML de produção dentro do dist/
+const buildId = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) || String(Date.now())
 const html = `<!doctype html>
 <html lang="pt-BR">
   <head>
@@ -53,11 +54,11 @@ const html = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ARCHLIGHT</title>
     <link rel="icon" href="./archlight_logo.png" />
-    <link rel="stylesheet" href="./index.css" />
+    <link rel="stylesheet" href="./index.css?v=${buildId}" />
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=${buildId}"></script>
   </body>
 </html>
 `
