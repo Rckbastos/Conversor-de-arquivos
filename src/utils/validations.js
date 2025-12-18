@@ -27,10 +27,11 @@ const CONVERSION_MAP = {
     txt: ['pdf'],
   },
   media: {
-    mp4: ['mp3', 'webm', 'gif'],
-    webm: ['mp4', 'mp3'],
-    mp3: ['wav', 'ogg'],
-    wav: ['mp3', 'ogg'],
+    mp4: ['mp3', 'wav', 'ogg', 'webm', 'gif'],
+    webm: ['mp4', 'mp3', 'wav', 'ogg'],
+    mp3: ['wav', 'ogg', 'mp4'],
+    wav: ['mp3', 'ogg', 'mp4'],
+    ogg: ['mp3', 'wav', 'mp4'],
   },
   data: {
     csv: ['json', 'xlsx', 'xml'],

@@ -38,8 +38,8 @@ app.innerHTML = `
           <div class="card-header">
             <div>
               <div style="display:flex; align-items:center; gap:12px">
-                <img src="${logoUrl}" alt="Arclight" style="width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 10px 14px rgba(0,0,0,.35))" />
-                <h1 class="title" style="font-size:20px; letter-spacing:0.2px">Arclight</h1>
+                <img src="${logoUrl}" alt="ARCHLIGHT" style="width:46px;height:46px;object-fit:contain;filter:drop-shadow(0 12px 18px rgba(0,0,0,.45))" />
+                <h1 class="title" style="font-size:22px; letter-spacing:1px">ARCHLIGHT</h1>
               </div>
             </div>
             <span class="badge">Local · Offline · Seguro</span>
