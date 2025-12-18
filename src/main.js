@@ -69,8 +69,8 @@ app.innerHTML = `
           <div class="card-header">
             <div>
               <div style="display:flex; align-items:center; gap:12px">
-                <img src="${logoUrl}" alt="ARCHLIGHT" style="width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 14px 22px rgba(0,0,0,.5))" />
-                <h1 class="title" style="font-size:30px; letter-spacing:1.4px">ARCHLIGHT</h1>
+                <img src="${logoUrl}" alt="ARCHLIGHT" style="width:68px;height:68px;object-fit:contain;filter:drop-shadow(0 16px 26px rgba(0,0,0,.55))" />
+                <h1 class="title" style="font-size:22.5px; letter-spacing:1.2px">ARCHLIGHT</h1>
               </div>
             </div>
             <span class="badge">Seguro</span>
