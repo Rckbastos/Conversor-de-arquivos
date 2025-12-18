@@ -3,11 +3,21 @@ import { fetchFile } from '@ffmpeg/util'
 import { buildOutputName } from '../utils/fileHandlers'
 
 let ffmpegInstance = null
+const FFMPEG_PKG_VERSION = '0.12.15'
+const FFMPEG_CLASS_WORKER_CDN = `https://unpkg.com/@ffmpeg/ffmpeg@${FFMPEG_PKG_VERSION}/dist/esm/worker.js`
 
 const loadFFmpeg = async () => {
   if (!ffmpegInstance) {
     ffmpegInstance = new FFmpeg()
-    await ffmpegInstance.load()
+    // Em builds com esbuild (sem Vite/Webpack), o @ffmpeg/ffmpeg tenta carregar `./worker.js`
+    // relativo ao bundle e pode virar `/worker.js` no deploy (404 -> HTML -> erro de MIME).
+    // Forçamos o class worker via CDN para garantir que carregue os imports ESM corretamente.
+    try {
+      await ffmpegInstance.load({ classWorkerURL: FFMPEG_CLASS_WORKER_CDN })
+    } catch (error) {
+      // Fallback: tentativa sem classWorkerURL (pode funcionar em alguns ambientes).
+      await ffmpegInstance.load()
+    }
   }
   return ffmpegInstance
 }
