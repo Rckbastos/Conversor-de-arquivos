@@ -1,8 +1,10 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
+import mammoth from 'mammoth'
+import JSZip from 'jszip'
 import { buildOutputName } from '../utils/fileHandlers'
 
-GlobalWorkerOptions.workerSrc = '/node_modules/pdfjs-dist/build/pdf.worker.min.mjs'
+GlobalWorkerOptions.workerSrc = '/dist/pdf.worker.min.mjs'
 
 const toPdfBlob = (bytes) => {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
@@ -95,6 +97,51 @@ const pdfPageToImage = async (file, targetFormat, jobId) => {
   }
 }
 
+const docxFromText = async (text) => {
+  const zip = new JSZip()
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n  <Default Extension="xml" ContentType="application/xml"/>\n  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>\n</Types>`,
+  )
+  zip
+    .folder('_rels')
+    ?.file(
+      '.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>\n</Relationships>`,
+    )
+
+  const word = zip.folder('word')
+  word
+    ?.folder('_rels')
+    ?.file(
+      'document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
+    )
+
+  const escapeXml = (value) =>
+    String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+
+  const paragraphs = String(text)
+    .split('\n')
+    .map((line) => `<w:p><w:r><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`)
+    .join('')
+
+  word?.file(
+    'document.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr/></w:body></w:document>`,
+  )
+
+  const arrayBuffer = await zip.generateAsync({ type: 'arraybuffer' })
+  return new Blob([arrayBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  })
+}
+
 export const convertDocument = async (job) => {
   const { file, options } = job
   const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -112,6 +159,34 @@ export const convertDocument = async (job) => {
     }
     if (target === 'png' || target === 'jpg') {
       return pdfPageToImage(file, target, job.id)
+    }
+    if (target === 'docx') {
+      const text = await extractPdfText(file)
+      const docxBlob = await docxFromText(text)
+      return {
+        jobId: job.id,
+        blob: docxBlob,
+        outputName: buildOutputName(file.name, 'docx'),
+        details: `${text.length} caracteres`,
+      }
+    }
+  }
+
+  if (extension === 'docx') {
+    const arrayBuffer = await file.arrayBuffer()
+    if (target === 'pdf') {
+      const { value } = await mammoth.extractRawText({ arrayBuffer })
+      const outputName = buildOutputName(file.name, 'pdf')
+      return pdfFromText(value, outputName, job.id)
+    }
+    if (target === 'txt') {
+      const { value } = await mammoth.extractRawText({ arrayBuffer })
+      return {
+        jobId: job.id,
+        blob: new Blob([value], { type: 'text/plain' }),
+        outputName: buildOutputName(file.name, 'txt'),
+        details: `${value.length} caracteres`,
+      }
     }
   }
 

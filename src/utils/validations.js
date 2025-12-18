@@ -1,21 +1,29 @@
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/svg+xml']
-const DOCUMENT_TYPES = ['application/pdf', 'text/plain']
+const DOCUMENT_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]
 const MEDIA_TYPES = ['video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg']
 const DATA_TYPES = ['text/csv', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/xml']
 const CODE_TYPES = ['application/json', 'application/x-yaml', 'text/yaml', 'text/html', 'text/markdown']
 
 const CONVERSION_MAP = {
   image: {
-    png: ['jpg', 'webp', 'gif', 'bmp', 'svg'],
-    jpg: ['png', 'webp', 'gif', 'bmp'],
-    jpeg: ['png', 'webp', 'gif', 'bmp'],
-    webp: ['png', 'jpg'],
-    gif: ['png', 'webp', 'mp4'],
-    bmp: ['png', 'jpg'],
+    // Conversões suportadas no browser via Canvas: saída PNG/JPG/WEBP.
+    // Também suportamos PNG/JPG/WebP -> SVG via vetorização (ImageTracer).
+    png: ['jpg', 'webp', 'svg'],
+    jpg: ['png', 'webp', 'svg'],
+    jpeg: ['png', 'webp', 'svg'],
+    webp: ['png', 'jpg', 'svg'],
+    gif: ['png', 'jpg', 'webp'],
+    bmp: ['png', 'jpg', 'webp', 'svg'],
+    // SVG pode ser rasterizado (SVG -> PNG/JPG/WEBP). Raster -> SVG usa vetorização local (pode variar por imagem).
     svg: ['png', 'jpg', 'webp'],
   },
   document: {
-    pdf: ['txt', 'png', 'jpg'],
+    pdf: ['docx', 'txt', 'png', 'jpg'],
+    docx: ['pdf', 'txt'],
     txt: ['pdf'],
   },
   media: {

@@ -4,15 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "esbuild src/main.js --bundle --format=esm --sourcemap --outdir=dist --watch --servedir=.",
-    "build": "esbuild src/main.js --bundle --format=esm --minify --outdir=dist"
+    "dev": "esbuild src/main.js --bundle --format=esm --sourcemap --outfile=dist/main.js --watch=forever --servedir=.",
+    "build": "node scripts/build.mjs",
+    "start": "node server.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@xmldom/xmldom": "^0.8.11",
     "file-saver": "^2.0.5",
+    "imagetracerjs": "^1.2.6",
     "js-yaml": "^4.1.1",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.11.0",
     "marked": "^17.0.1",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
