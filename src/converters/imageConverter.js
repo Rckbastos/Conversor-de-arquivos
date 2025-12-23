@@ -18,6 +18,73 @@ const clampQuality = (quality) => {
 }
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+const clampByte = (value) => Math.min(255, Math.max(0, Math.round(value)))
+
+const parseHexColor = (value) => {
+  if (!value) return null
+  const hex = value.trim().replace('#', '')
+  if (!hex.length) return null
+  const normalized = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+  if (normalized.length !== 6 || /[^0-9a-f]/i.test(normalized)) return null
+  const num = parseInt(normalized, 16)
+  return {
+    r: (num >> 16) & 255,
+    g: (num >> 8) & 255,
+    b: num & 255,
+  }
+}
+
+const rgbToHex = (color) => {
+  const toHex = (n) => clampByte(n).toString(16).padStart(2, '0')
+  return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`
+}
+
+// Média apenas dos pixels visíveis (alpha > 0), reduzindo a imagem para evitar travamentos.
+const averageVisibleColor = (image) => {
+  const maxSide = Math.max(image.width, image.height) || 1
+  const target = Math.min(256, maxSide)
+  const scale = Math.min(1, target / maxSide)
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  canvas.width = width
+  canvas.height = height
+  ctx.drawImage(image, 0, 0, width, height)
+  const { data } = ctx.getImageData(0, 0, width, height)
+  let r = 0
+  let g = 0
+  let b = 0
+  let count = 0
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3]
+    if (a === 0) continue
+    r += data[i]
+    g += data[i + 1]
+    b += data[i + 2]
+    count++
+  }
+  if (!count) return null
+  return {
+    r: clampByte(r / count),
+    g: clampByte(g / count),
+    b: clampByte(b / count),
+  }
+}
+
+const applyFlatColor = (imageData, color) => {
+  if (!imageData || !color) return imageData
+  const data = imageData.data
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue
+    data[i] = color.r
+    data[i + 1] = color.g
+    data[i + 2] = color.b
+  }
+  return imageData
+}
 
 const pickPreset = (metadata, mode) => {
   const requested = String(metadata?.vectorPreset ?? 'auto').toLowerCase()
@@ -139,6 +206,15 @@ export const convertImage = async (job) => {
   }
 
   const image = await readFile(file)
+  const flatColor =
+    options?.metadata?.flatApply === true
+      ? parseHexColor(options?.metadata?.flatColorHex) ||
+        (options?.metadata?.flatAuto !== false ? averageVisibleColor(image) : null)
+      : null
+  if (options?.metadata?.flatApply && !flatColor) {
+    throw new Error('Não foi possível detectar a cor dominante (imagem vazia?)')
+  }
+  const flatColorHex = flatColor ? rgbToHex(flatColor) : null
 
   const aspectRatio = image.width / image.height
   let targetWidth = options.width || image.width
@@ -171,6 +247,12 @@ export const convertImage = async (job) => {
       }
       ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
 
+      if (flatColor) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        applyFlatColor(imageData, flatColor)
+        ctx.putImageData(imageData, 0, 0)
+      }
+
       const dataUrl = canvas.toDataURL('image/png')
       const svgString = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}" viewBox="0 0 ${targetWidth} ${targetHeight}">
@@ -183,7 +265,9 @@ export const convertImage = async (job) => {
         blob,
         outputName,
         previewUrl: URL.createObjectURL(blob),
-        details: `SVG (imagem embutida) · ${targetWidth}x${targetHeight}`,
+        details: `SVG (imagem embutida) · ${targetWidth}x${targetHeight}${
+          flatColorHex ? ` · Cor única ${flatColorHex}` : ''
+        }`,
       }
     }
 
@@ -217,6 +301,9 @@ export const convertImage = async (job) => {
     if (options?.metadata?.vectorHomogenize) {
       homogenizeColors(imageData, options?.metadata?.vectorHomogenize)
     }
+    if (flatColor) {
+      applyFlatColor(imageData, flatColor)
+    }
     const vectorOptions = buildVectorizeOptions(options?.metadata)
     // Se a imagem foi reduzida para performance, mantemos a escala original no SVG.
     vectorOptions.scale = scaleFactor
@@ -228,7 +315,9 @@ export const convertImage = async (job) => {
       blob,
       outputName,
       previewUrl: URL.createObjectURL(blob),
-      details: `SVG vetorizado · ${targetWidth}x${targetHeight} · ${vectorOptions.numberofcolors} cores`,
+      details: `SVG vetorizado · ${targetWidth}x${targetHeight} · ${vectorOptions.numberofcolors} cores${
+        flatColorHex ? ` · Cor única ${flatColorHex}` : ''
+      }`,
     }
   }
 
@@ -245,6 +334,12 @@ export const convertImage = async (job) => {
   canvas.width = targetWidth
   canvas.height = targetHeight
   ctx.drawImage(image, 0, 0, targetWidth, targetHeight)
+
+  if (flatColor) {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    applyFlatColor(imageData, flatColor)
+    ctx.putImageData(imageData, 0, 0)
+  }
 
   let quality = clampQuality(options.quality)
   if (options.smartCompression && targetFormat === 'jpg') {
@@ -272,6 +367,8 @@ export const convertImage = async (job) => {
     blob,
     outputName,
     previewUrl: URL.createObjectURL(blob),
-    details: `${targetWidth}x${targetHeight} · Qualidade ${(quality * 100).toFixed(0)}%`,
+    details: `${targetWidth}x${targetHeight} · Qualidade ${(quality * 100).toFixed(0)}%${
+      flatColorHex ? ` · Cor única ${flatColorHex}` : ''
+    }`,
   }
 }

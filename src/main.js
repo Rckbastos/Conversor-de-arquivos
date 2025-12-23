@@ -116,6 +116,27 @@ app.innerHTML = `
                 <span class="text-muted" id="quality-value">90%</span>
               </div>
             </div>
+            <div id="flat-panel" style="margin-top:12px; display:none">
+              <p class="text-muted" style="margin:0 0 8px; font-weight:700">Cor única (achatar gradiente)</p>
+              <p class="text-muted" style="margin:0 0 10px">
+                Detecte a cor dominante (pixels visíveis) ou escolha uma cor para aplicar em toda a arte. Útil para preparar logos antes do SVG.
+              </p>
+              <div class="toggle-row">
+                <label class="toggle" style="display:flex; align-items:center; gap:10px">
+                  <input type="checkbox" id="flat-enable" />
+                  Aplicar cor única
+                </label>
+                <label class="toggle" style="display:flex; align-items:center; gap:10px">
+                  <input type="checkbox" id="flat-auto" checked />
+                  Detectar automaticamente
+                </label>
+              </div>
+              <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+                <input type="color" id="flat-color" value="#000000" style="width:52px; height:42px; padding:0; border:none; background:transparent" />
+                <input type="text" id="flat-color-text" class="input" value="#000000" style="max-width:140px" />
+                <span class="text-muted" id="flat-color-hint">Usa a média dos pixels visíveis.</span>
+              </div>
+            </div>
             <div id="vector-panel" style="margin-top:12px; display:none">
               <p class="text-muted" style="margin:0 0 8px; font-weight:700">Vetorização (PNG/JPG → SVG)</p>
               <label class="label" for="vector-mode">Perfil</label>
@@ -280,6 +301,12 @@ const formatSelect = document.getElementById('format-select')
 const formatLabel = document.getElementById('format-label')
 const qualityRange = document.getElementById('quality-range')
 const qualityValue = document.getElementById('quality-value')
+const flatPanel = document.getElementById('flat-panel')
+const flatEnable = document.getElementById('flat-enable')
+const flatAuto = document.getElementById('flat-auto')
+const flatColor = document.getElementById('flat-color')
+const flatColorText = document.getElementById('flat-color-text')
+const flatColorHint = document.getElementById('flat-color-hint')
 const vectorPanel = document.getElementById('vector-panel')
 const vectorMode = document.getElementById('vector-mode')
 const vectorColors = document.getElementById('vector-colors')
@@ -414,6 +441,55 @@ function handleTargetUi() {
   if (vectorPanel) {
     vectorPanel.style.display = target === 'svg' ? 'block' : 'none'
   }
+  if (flatPanel) {
+    flatPanel.style.display = target === 'svg' || target === 'png' ? 'block' : 'none'
+  }
+}
+
+const normalizeHexInput = (value) => {
+  const cleaned = (value || '').trim().replace('#', '').replace(/[^0-9a-f]/gi, '').slice(0, 6)
+  if (!cleaned) return ''
+  return `#${cleaned}`
+}
+
+const expandShortHex = (hex) => {
+  if (/^#[0-9a-f]{6}$/i.test(hex)) return hex
+  if (/^#[0-9a-f]{3}$/i.test(hex)) {
+    const [, a, b, c] = hex
+    return `#${a}${a}${b}${b}${c}${c}`
+  }
+  return '#000000'
+}
+
+const updateFlatHint = () => {
+  if (!flatColorHint) return
+  const apply = Boolean(flatEnable?.checked)
+  const auto = Boolean(flatAuto?.checked)
+  const raw = normalizeHexInput(flatColorText?.value || flatColor?.value || '') || '#000000'
+  const hex = expandShortHex(raw).toUpperCase()
+  if (auto) {
+    flatColorHint.textContent = apply
+      ? 'Aplicará a cor média dos pixels visíveis.'
+      : 'Detecta cor média; marque para aplicar.'
+  } else {
+    flatColorHint.textContent = `Cor manual ${hex}`
+  }
+}
+
+const syncFlatColor = (value) => {
+  const normalized = normalizeHexInput(value)
+  if (flatColorText) {
+    flatColorText.value = normalized || '#000000'
+  }
+  if (flatColor && (normalized.length === 4 || normalized.length === 7)) {
+    flatColor.value = expandShortHex(normalized)
+  }
+  updateFlatHint()
+}
+
+const setFlatInputsDisabled = (disabled) => {
+  if (flatColor) flatColor.disabled = disabled
+  if (flatColorText) flatColorText.disabled = disabled
 }
 
 const clearResult = () => {
@@ -433,6 +509,10 @@ const resetAll = () => {
   formatLabel.textContent = 'Selecione o destino'
   statusText.textContent = 'Aguardando arquivo.'
   convertBtn.disabled = true
+  if (flatEnable) flatEnable.checked = false
+  if (flatAuto) flatAuto.checked = true
+  setFlatInputsDisabled(true)
+  syncFlatColor('#000000')
 }
 
 tabConvert?.addEventListener('click', () => setActiveTab('convert'))
@@ -557,6 +637,16 @@ qualityRange?.addEventListener('input', () => {
 
 formatSelect?.addEventListener('change', () => handleTargetUi())
 
+flatColor?.addEventListener('input', () => syncFlatColor(flatColor.value))
+flatColorText?.addEventListener('input', () => syncFlatColor(flatColorText.value))
+flatAuto?.addEventListener('change', () => {
+  setFlatInputsDisabled(flatAuto.checked)
+  updateFlatHint()
+})
+flatEnable?.addEventListener('change', updateFlatHint)
+setFlatInputsDisabled(flatAuto?.checked ?? true)
+syncFlatColor(flatColor?.value || '#000000')
+
 vectorColors?.addEventListener('input', () => {
   if (vectorColorsValue) vectorColorsValue.textContent = String(vectorColors.value)
 })
@@ -636,6 +726,15 @@ convertBtn?.addEventListener('click', async () => {
   try {
     const converter = getConverter(detectedCategory)
     const file = currentFiles[0]
+    const allowFlat = detectedCategory === 'image' && (targetFormat === 'png' || targetFormat === 'svg')
+    const flatSettings =
+      allowFlat
+        ? {
+            flatApply: Boolean(flatEnable?.checked),
+            flatAuto: Boolean(flatAuto?.checked),
+            flatColorHex: (flatColorText?.value || flatColor?.value || '').trim(),
+          }
+        : {}
     const job = {
       id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
       file,
@@ -646,20 +745,25 @@ convertBtn?.addEventListener('click', async () => {
         maintainAspectRatio: true,
         smartCompression: true,
         metadata:
-          targetFormat === 'svg'
+          detectedCategory === 'image'
             ? {
-                vectorMode: vectorMode?.value ?? 'logo',
-                vectorColors: Number(vectorColors?.value ?? 16),
-                vectorDetail: Number(vectorDetail?.value ?? 7),
-                vectorMaxSide: Number(vectorMaxSide?.value ?? 1800),
-                vectorPreset: vectorPreset?.value ?? 'auto',
-                vectorRemoveBg: Boolean(vectorRemoveBg?.checked),
-                vectorBgTolerance: Number(vectorBgTol?.value ?? 18),
-                vectorEnhanceCorners: Boolean(vectorCorners?.checked),
-                vectorEmbedRaster: Boolean(vectorEmbed?.checked),
-                vectorSmoothing: Number(vectorSmooth?.value ?? 3),
-                vectorHomogenize: Number(vectorHomog?.value ?? 0),
-                vectorBlur: Number(vectorBlur?.value ?? 0),
+                ...(targetFormat === 'svg'
+                  ? {
+                      vectorMode: vectorMode?.value ?? 'logo',
+                      vectorColors: Number(vectorColors?.value ?? 16),
+                      vectorDetail: Number(vectorDetail?.value ?? 7),
+                      vectorMaxSide: Number(vectorMaxSide?.value ?? 1800),
+                      vectorPreset: vectorPreset?.value ?? 'auto',
+                      vectorRemoveBg: Boolean(vectorRemoveBg?.checked),
+                      vectorBgTolerance: Number(vectorBgTol?.value ?? 18),
+                      vectorEnhanceCorners: Boolean(vectorCorners?.checked),
+                      vectorEmbedRaster: Boolean(vectorEmbed?.checked),
+                      vectorSmoothing: Number(vectorSmooth?.value ?? 3),
+                      vectorHomogenize: Number(vectorHomog?.value ?? 0),
+                      vectorBlur: Number(vectorBlur?.value ?? 0),
+                    }
+                  : {}),
+                ...flatSettings,
               }
             : undefined,
       },

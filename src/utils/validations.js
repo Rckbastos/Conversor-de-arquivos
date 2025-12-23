@@ -12,7 +12,7 @@ const CONVERSION_MAP = {
   image: {
     // Conversões suportadas no browser via Canvas: saída PNG/JPG/WEBP.
     // Também suportamos PNG/JPG/WebP -> SVG via vetorização (ImageTracer).
-    png: ['jpg', 'webp', 'svg'],
+    png: ['png', 'jpg', 'webp', 'svg'],
     jpg: ['png', 'webp', 'svg'],
     jpeg: ['png', 'webp', 'svg'],
     webp: ['png', 'jpg', 'svg'],
